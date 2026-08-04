@@ -37,7 +37,8 @@ The canonical app-side contract is maintained in Norea:
 <https://github.com/tinywind/norea/blob/main/docs/plugins/contract.md#app-managed-plugin-inputs>
 
 A compatible host must persist the input keys above for the `komga` plugin
-before calling `popularNovels`, `searchNovels`, `parseNovel`, or `parseChapter`.
+before calling `popularNovels`, `searchNovels`, `parseNovel`, or
+`getChapterResource`.
 
 Komga API authentication supports Basic authentication and API-key based flows.
 This sample currently implements Basic authentication only.

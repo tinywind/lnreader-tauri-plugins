@@ -10,7 +10,12 @@ fs.readdirSync(PLUGIN_DIR)
   .forEach(langName => {
     const LANG_DIR = PLUGIN_DIR + '/' + langName;
     fs.readdirSync(LANG_DIR)
-      .filter(f => !f.includes('broken') && !f.startsWith('.'))
+      .filter(
+        f =>
+          !f.includes('broken') &&
+          !f.endsWith('.helper.ts') &&
+          !f.startsWith('.'),
+      )
       .forEach(pluginName => {
         content += `import p_${pluginCounter} from '@plugins/${langName}/${pluginName.replace(/\.ts$/, '')}';\n`;
         pluginCounter += 1;

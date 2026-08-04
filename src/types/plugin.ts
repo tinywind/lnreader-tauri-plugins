@@ -1,6 +1,54 @@
 import { FilterToValues, Filters } from '@libs/filterInputs';
 export namespace Plugin {
-  export type ChapterContentType = 'html' | 'text' | 'pdf' | 'epub';
+  export const API_VERSION = '0.2' as const;
+  export type ApiVersion = typeof API_VERSION;
+  export type ChapterCaptureLoadStrategy =
+    | 'selector'
+    | 'network-idle'
+    | 'scroll-to-end';
+  export type ChapterCaptureErrorCode =
+    | 'invalid-plan'
+    | 'navigation-failed'
+    | 'manual-action-required'
+    | 'timeout'
+    | 'content-not-found'
+    | 'capture-failed'
+    | 'cancelled';
+  export type TextChapterContentType = Extract<
+    ChapterContentType,
+    'html' | 'text' | 'markdown'
+  >;
+  export type ChapterPageAcquisitionPlan = {
+    type: 'page';
+    /** Absolute HTTP(S) URL. Preserve required query parameters. */
+    url: string;
+    /** First matching element becomes the reader content root. */
+    contentSelector: string;
+    /** Defaults to contentSelector. */
+    readySelector?: string;
+    /** Elements removed from the cloned content before it is stored. */
+    excludeSelectors?: string[];
+    /** Runs before source page scripts and may prepare a capturable DOM root. */
+    documentStartScript?: string;
+    /** Defaults to network-idle. */
+    loadStrategy?: ChapterCaptureLoadStrategy;
+    /** Add a host-owned query value without discarding existing parameters. */
+    cacheBust?: boolean;
+    /** Host-clamped total navigation and capture timeout. */
+    timeoutMs?: number;
+  };
+  export type ChapterResourceAcquisitionPlan = {
+    type: 'resource';
+  };
+  export type ChapterAcquisitionPlan =
+    | ChapterPageAcquisitionPlan
+    | ChapterResourceAcquisitionPlan;
+  export type ChapterContentType =
+    | 'html'
+    | 'text'
+    | 'markdown'
+    | 'pdf'
+    | 'epub';
   export type ChapterBinaryMediaType =
     | 'application/pdf'
     | 'application/epub+zip';
@@ -10,17 +58,23 @@ export namespace Plugin {
     contentType: Extract<ChapterContentType, 'pdf' | 'epub'>;
     mediaType: ChapterBinaryMediaType;
     filename?: string;
-    byteLength: number;
+    byteLength?: number;
     bytes: ArrayBuffer | Uint8Array;
-    sha256?: string;
-    fallbackHtml?: string;
   };
+  export type ChapterContentResource = {
+    type: 'content';
+    contentType: TextChapterContentType;
+    content: string;
+    /** Absolute URL used to resolve relative media references. */
+    baseUrl?: string;
+  };
+  export type ChapterResource = ChapterContentResource | ChapterBinaryResource;
 
   export type ChapterItem = {
     name: string;
     path: string;
     /**
-     * Defaults to "html" for older hosts and plugins.
+     * Defaults to "html".
      */
     contentType?: ChapterContentType;
     /**
@@ -72,6 +126,8 @@ export namespace Plugin {
     version: string;
     icon: string;
     installMode?: InstallMode;
+    /** Host/plugin contract version. */
+    apiVersion: ApiVersion;
   };
   export type ImageRequestInit = {
     method?: string;
@@ -95,6 +151,7 @@ export namespace Plugin {
   export type PluginInputSchema = Record<string, PluginInputDefinition>;
 
   export type PluginBase = {
+    apiVersion: typeof API_VERSION;
     id: string;
     name: string;
     /**
@@ -129,10 +186,16 @@ export namespace Plugin {
       novelPath: string,
       sinceChapterNumber: number,
     ): Promise<SourceNovel>;
-    /** Return content matching the chapter row's contentType. */
-    parseChapter(chapterPath: string): Promise<string>;
-    /** Return binary content for PDF/EPUB chapters when supported. */
-    parseChapterResource?(chapterPath: string): Promise<ChapterBinaryResource>;
+    /** Return declarative browser capture or explicit resource acquisition. */
+    getChapterAcquisitionPlan(
+      chapterPath: string,
+      contentType: ChapterContentType,
+    ): ChapterAcquisitionPlan;
+    /** Fetch non-page API, archive, PDF, or EPUB resources declared by the plan. */
+    getChapterResource?(
+      chapterPath: string,
+      contentType: ChapterContentType,
+    ): Promise<ChapterResource>;
     searchNovels(searchTerm: string, pageNo: number): Promise<NovelItem[]>;
     resolveUrl?(path: string, isNovel?: boolean): string;
   };

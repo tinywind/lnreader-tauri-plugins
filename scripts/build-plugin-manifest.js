@@ -23,6 +23,7 @@ const USER_CONTENT_LINK = (
 
 const STATIC_LINK = `${USER_CONTENT_LINK}/public/static`;
 const PLUGIN_LINK = `${USER_CONTENT_LINK}/.js/plugins`;
+const PLUGIN_API_VERSION = '0.2';
 
 const DIST_DIR = '.dist';
 const args = process.argv.slice(2);
@@ -46,8 +47,10 @@ if (!fs.existsSync(jsonPath)) ONLY_NEW = false;
 if (ONLY_NEW) {
   try {
     const existingJson = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-    json = existingJson;
-    for (const plugin of existingJson) {
+    json = existingJson.filter(
+      plugin => plugin.apiVersion === PLUGIN_API_VERSION,
+    );
+    for (const plugin of json) {
       existingPlugins[plugin.id] = plugin;
     }
   } catch (e) {
@@ -127,8 +130,14 @@ for (let language in manifestLanguages) {
       customCSS,
       filters,
       installMode,
+      apiVersion,
     } = instance;
     const normalisedName = name.replace(/\[.*\]/, '');
+    if (apiVersion !== PLUGIN_API_VERSION) {
+      throw new Error(
+        `Plugin ${id || plugin} must declare apiVersion ${PLUGIN_API_VERSION}`,
+      );
+    }
 
     // --only-new logic
     if (
@@ -138,6 +147,9 @@ for (let language in manifestLanguages) {
     ) {
       // console.log(`   Skipping ${name} (${id}) - not newer`, '\r🔁');
       return;
+    }
+    if (ONLY_NEW && existingPlugins[id]) {
+      json = json.filter(existing => existing.id !== id);
     }
 
     const info = {
@@ -150,6 +162,7 @@ for (let language in manifestLanguages) {
       customJS: customJS ? `${STATIC_LINK}/${customJS}` : undefined,
       customCSS: customCSS ? `${STATIC_LINK}/${customCSS}` : undefined,
       installMode,
+      apiVersion,
     };
 
     if (pluginSet.has(id)) {

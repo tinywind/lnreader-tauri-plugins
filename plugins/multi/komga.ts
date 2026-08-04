@@ -115,6 +115,7 @@ function responseContentType(response: Response) {
 }
 
 class KomgaPlugin implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
   id = 'komga';
   name = 'Komga';
   icon = 'src/multi/komga/icon.png';
@@ -360,7 +361,13 @@ class KomgaPlugin implements Plugin.PluginBase {
     return this.parseNovel(novelPath);
   }
 
-  async parseChapter(chapterPath: string): Promise<string> {
+  getChapterAcquisitionPlan(): Plugin.ChapterAcquisitionPlan {
+    return { type: 'resource' };
+  }
+
+  async getChapterResource(
+    chapterPath: string,
+  ): Promise<Plugin.ChapterResource> {
     const baseUrl = this.serverUrl();
     const response = await this.makeResponse(chapterPath, {
       accept: 'application/xhtml+xml, text/html, image/*, */*',
@@ -368,14 +375,25 @@ class KomgaPlugin implements Plugin.PluginBase {
     const contentType = responseContentType(response);
 
     if (contentType.startsWith('image/')) {
-      return this.imageResponseToHtml(response, contentType);
+      return {
+        type: 'content',
+        contentType: 'html',
+        content: await this.imageResponseToHtml(response, contentType),
+        baseUrl: absoluteUrl(baseUrl, chapterPath),
+      };
     }
 
     const chapterText = await response.text();
-    return this.addUrlToImageHref(
-      chapterText,
-      absoluteUrl(baseUrl, chapterPath.split('/').slice(0, -1).join('/') + '/'),
+    const chapterBaseUrl = absoluteUrl(
+      baseUrl,
+      chapterPath.split('/').slice(0, -1).join('/') + '/',
     );
+    return {
+      type: 'content',
+      contentType: 'html',
+      content: this.addUrlToImageHref(chapterText, chapterBaseUrl),
+      baseUrl: chapterBaseUrl,
+    };
   }
 
   async imageResponseToHtml(response: Response, contentType: string) {

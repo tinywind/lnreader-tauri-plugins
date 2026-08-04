@@ -105,25 +105,41 @@ export function useEpubExport({
       for (let i = 0; i < allChapters.length; i++) {
         const chapter = allChapters[i];
         try {
-          if (
-            (chapter.contentType === 'pdf' || chapter.contentType === 'epub') &&
-            plugin.parseChapterResource
-          ) {
-            const resource = await plugin.parseChapterResource(chapter.path);
-            chapterContents.push({
-              title: chapter.name,
-              content: resource.fallbackHtml || binaryFallbackHtml(resource),
-              path: chapter.path,
-              binaryResource: resource,
-            });
-          } else {
-            const content = chapterContentToHtml(
-              chapter,
-              await plugin.parseChapter(chapter.path),
+          const contentType = chapter.contentType ?? 'html';
+          const plan = plugin.getChapterAcquisitionPlan(
+            chapter.path,
+            contentType,
+          );
+          if (plan.type === 'resource') {
+            const getChapterResource = plugin.getChapterResource?.bind(plugin);
+            if (!getChapterResource) {
+              throw new Error(
+                'Plugin must implement getChapterResource() for resource plans.',
+              );
+            }
+            const resource = await getChapterResource(
+              chapter.path,
+              contentType,
             );
+            if (resource.type === 'content') {
+              chapterContents.push({
+                title: chapter.name,
+                content: chapterContentToHtml(chapter, resource.content),
+                path: chapter.path,
+              });
+            } else {
+              chapterContents.push({
+                title: chapter.name,
+                content: binaryFallbackHtml(resource),
+                path: chapter.path,
+                binaryResource: resource,
+              });
+            }
+          } else {
             chapterContents.push({
               title: chapter.name,
-              content: content || '<p>No content available</p>',
+              content:
+                '<p>This chapter requires host-owned WebView page capture.</p>',
               path: chapter.path,
             });
           }

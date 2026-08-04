@@ -1,568 +1,85 @@
-# Documentation for Norea plugins
+# Norea plugin API 0.2
 
-This document is an authoring companion for sample plugins in this repository.
-The canonical runtime, sandbox, module whitelist, and host capability contract
-lives in [Norea's plugin contract](https://github.com/tinywind/norea/blob/main/docs/plugins/contract.md).
-Keep this repository focused on sample plugins and source policy.
-
-- [PluginBase](#pluginbase)
-- [NovelItem](#novelitem)
-- [SourceNovel](#sourcenovel)
-- [ChapterItem](#chapteritem)
-- [Filters](#filters)
-- [Plugin Inputs](#plugin-inputs)
-- [Using Cheerio](#using-cheerio)
-- [Fetching](#fetching)
-- [Storage](#storage)
-
-Most plugin domain types are available through the `Plugin` namespace:
+The canonical TypeScript contract is `src/types/plugin.ts`. Every published
+source implements `Plugin.PluginBase` and declares:
 
 ```ts
-import { Plugin } from '@/types/plugin';
+apiVersion = '0.2' as const; // "0.2"
 ```
 
-Filters are imported separately:
+## Plugin surface
+
+Required fields are `apiVersion`, `id`, `name`, `version`, and `icon`.
+Required methods are `getBaseUrl`, `popularNovels`, `searchNovels`,
+`parseNovel`, `parseNovelSince`, and `getChapterAcquisitionPlan`.
+
+Optional fields include filters, plugin inputs, image request headers, custom
+assets, multi-source installation, `resolveUrl`, and `webStorageUtilized`.
+
+## Chapter plans
+
+`getChapterAcquisitionPlan(chapterPath, contentType)` is synchronous and must
+not perform network traffic or mutate state.
 
 ```ts
-import { FilterTypes, Filters } from '@libs/filterInputs';
+type ChapterAcquisitionPlan =
+  | {
+      type: 'page';
+      url: string;
+      contentSelector: string;
+      readySelector?: string;
+      excludeSelectors?: string[];
+      documentStartScript?: string;
+      loadStrategy?: 'selector' | 'network-idle' | 'scroll-to-end';
+      cacheBust?: boolean;
+      timeoutMs?: number;
+    }
+  | { type: 'resource' };
 ```
 
-## PluginBase
+Page plans are the default for website content. The host owns navigation, DOM
+capture, sanitization, browser-cache reuse, media downloading, manifests,
+archives, cancellation, and resume behavior. `cacheBust` adds a host query
+value while preserving all source parameters.
 
-Every plugin exports one instance that implements `Plugin.PluginBase`.
+Use `documentStartScript` only to prepare rendered content. It may observe
+source responses and inject a stable light-DOM root. It must not emit its own
+WebView result. Mark gates requiring user interaction with
+`data-norea-manual-action`.
+
+## Explicit resources
+
+Resource plans require `getChapterResource(chapterPath, contentType)`.
 
 ```ts
-class ExamplePlugin implements Plugin.PluginBase {
-  id = 'example';
-  name = 'Example';
-  icon = 'siteNotAvailable.png';
-  getBaseUrl(): string {
-    return 'https://example.com/';
-  }
-  version = '1.0.0';
-
-  async popularNovels(pageNo: number): Promise<Plugin.NovelItem[]> {
-    return [];
-  }
-
-  async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
-    return { name: 'Untitled', path: novelPath, chapters: [] };
-  }
-
-  async parseNovelSince(
-    novelPath: string,
-    sinceChapterNumber: number,
-  ): Promise<Plugin.SourceNovel> {
-    const novel = await this.parseNovel(novelPath);
-    return {
-      ...novel,
-      chapters: novel.chapters.filter(
-        chapter => chapter.chapterNumber >= sinceChapterNumber,
-      ),
+type ChapterResource =
+  | {
+      type: 'content';
+      contentType: 'html' | 'text' | 'markdown';
+      content: string;
+      baseUrl?: string;
+    }
+  | {
+      type: 'binary';
+      contentType: 'pdf' | 'epub';
+      mediaType: 'application/pdf' | 'application/epub+zip';
+      bytes: ArrayBuffer | Uint8Array;
+      filename?: string;
+      byteLength?: number;
     };
-  }
-
-  async parseChapter(chapterPath: string): Promise<string> {
-    return '';
-  }
-
-  async searchNovels(
-    searchTerm: string,
-    pageNo: number,
-  ): Promise<Plugin.NovelItem[]> {
-    return [];
-  }
-}
-
-export default new ExamplePlugin();
 ```
 
-| Field                                            | Required          | Description                                                                                                                                                        |
-| ------------------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`                                             | yes               | Stable plugin id. Must match the repository manifest entry.                                                                                                        |
-| `name`                                           | yes               | Display name shown in the app.                                                                                                                                     |
-| `icon`                                           | yes               | Path under `public/static`, without the `public/static/` prefix.                                                                                                   |
-| `getBaseUrl()`                                   | yes               | Returns the runtime base URL used by the host for navigation, URL fallback, and fetch context.                                                                     |
-| `version`                                        | yes               | Semver-style plugin version.                                                                                                                                       |
-| `imageRequestInit`                               | no                | Extra request init for cover image requests.                                                                                                                       |
-| `filters`                                        | no                | Filter schema used by `popularNovels`.                                                                                                                             |
-| `pluginInputs`                                   | no                | App-managed input schema for sources that need user-provided values.                                                                                               |
-| `pluginSettings`                                 | no                | Compatibility alias for hosts that support upstream-style plugin settings.                                                                                         |
-| `popularNovels(pageNo, options)`                 | yes               | Returns a page of source items.                                                                                                                                    |
-| `parseNovel(novelPath)`                          | yes               | Returns metadata and chapter list for one source item.                                                                                                             |
-| `parseNovelSince(novelPath, sinceChapterNumber)` | yes               | Returns the same metadata fields as `parseNovel`, with chapters starting at `sinceChapterNumber` when the plugin can optimize. Returning the full list is allowed. |
-| `parseChapter(chapterPath)`                      | yes               | Returns string content for one chapter. HTML/text chapters use this directly; PDF/EPUB chapters use it as a readable fallback.                                     |
-| `parseChapterResource(chapterPath)`              | no                | Returns a binary buffer resource for PDF/EPUB chapters when the plugin supports first-class binary transfer.                                                       |
-| `searchNovels(searchTerm, pageNo)`               | yes               | Returns a page of search results.                                                                                                                                  |
-| `resolveUrl(path, isNovel?)`                     | no                | Converts opaque plugin paths into browser URLs.                                                                                                                    |
-| `parsePage(novelPath, page)`                     | page plugins only | Returns additional chapter pages for paginated sources.                                                                                                            |
+Use resources for documented connector APIs, archive decoding, PDF, and EPUB,
+not as an alternative HTTP parser for ordinary chapter pages.
 
-### `id`
+## Paths, authentication, and traffic
 
-Use lowercase, stable kebab-case ids. Use hyphens as word separators instead
-of spaces, dots, or joined multi-word names. Changing an id makes the host treat
-the plugin as a different source.
+Paths may be relative, absolute, or opaque encoded payloads. Keep credentials
+in private plugin inputs or request init objects. Do not persist secrets in
+novel paths, chapter paths, or content.
 
-```ts
-id = 'standard-ebooks';
-```
+All source traffic uses the sanctioned fetch and WebView shims so the Norea
+scraper session owns cookies and challenge state. Page plan URLs must retain
+every signed parameter and media access key.
 
-### `name`
-
-Use the source or connector name shown to users.
-
-```ts
-name = 'Standard Ebooks';
-```
-
-### `icon`
-
-Store icons under `public/static`. The `icon` field is relative to that
-directory and must not include `public/static/`.
-
-```ts
-icon = 'src/multi/komga/icon.png';
-```
-
-Use 96x96 px PNG icons where possible. If no icon is available, use:
-
-```ts
-icon = 'siteNotAvailable.png';
-```
-
-### `getBaseUrl()`
-
-For public sources, return the real source origin.
-
-```ts
-getBaseUrl(): string {
-  return 'https://standardebooks.org/';
-}
-```
-
-For self-hosted connectors, read the user's server URL from settings or storage
-at request time. Return a non-empty absolute `http` or `https` URL.
-
-### `version`
-
-Use `<major>.<minor>.<patch>`.
-
-- Increment `patch` for small fixes such as selector, URL, or filter value fixes.
-- Increment `minor` for compatible capability changes such as new filters.
-- Increment `major` for incompatible path or behavior changes.
-
-### `imageRequestInit`
-
-Use this only when covers require extra headers.
-
-```ts
-imageRequestInit: Plugin.ImageRequestInit = {
-  headers: {
-    Referer: 'https://example.com/',
-  },
-};
-```
-
-### `popularNovels`
-
-Return source items for the requested one-based page number. `showLatestNovels`
-is true when the host requests the latest listing. `filters` contains resolved
-filter values when the plugin defines filters.
-
-```ts
-async popularNovels(
-  pageNo: number,
-  options: Plugin.PopularNovelsOptions<typeof this.filters>,
-): Promise<Plugin.NovelItem[]> {
-  const mode = options.showLatestNovels ? 'latest' : 'popular';
-  const order = options.filters?.order.value || mode;
-
-  return [
-    {
-      name: `Example ${order}`,
-      path: `books/example-${pageNo}`,
-      cover: 'https://example.com/cover.jpg',
-    },
-  ];
-}
-```
-
-### `parseNovel`
-
-`parseNovel` receives the `NovelItem.path` returned by `popularNovels` or
-`searchNovels`. It must return the same `path` value on the `SourceNovel` and
-the full chapter list in reading order by `chapterNumber`.
-
-```ts
-async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
-  return {
-    name: 'Example Book',
-    path: novelPath,
-    author: 'Example Author',
-    cover: 'https://example.com/cover.jpg',
-    genres: 'Fantasy, Adventure',
-    status: 'Completed',
-    summary: 'Short source summary.',
-    chapters: [
-      {
-        name: 'Chapter 1',
-        path: `${novelPath}/chapter-1`,
-        chapterNumber: 1,
-        contentType: 'html',
-      },
-    ],
-  };
-}
-```
-
-### `parseNovelSince`
-
-`parseNovelSince` receives the same `novelPath` plus an inclusive
-`sinceChapterNumber` anchor. Return the same metadata fields as `parseNovel`.
-The `chapters` array should contain only chapters whose `chapterNumber` is
-greater than or equal to the anchor when the source can support that cheaply.
-Returning the full chapter list is valid. The returned list must still be sorted
-by `chapterNumber` in ascending reading order.
-
-### `parseChapter`
-
-`parseChapter` receives a `ChapterItem.path` and returns string chapter content.
-For `contentType: 'html'`, return reader-ready HTML without source chrome or
-scripts. The Norea host resolves `<img src>` values relative to
-`resolveUrl(path, false)` or the chapter path, downloads those media files
-locally, and rewrites the saved HTML to local media URLs. For
-`contentType: 'text'`, return raw plain text; the host escapes it. For
-`contentType: 'pdf'` or `contentType: 'epub'`, return a readable HTML fallback.
-
-```ts
-async parseChapter(chapterPath: string): Promise<string> {
-  const response = await fetchApi(new URL(chapterPath, this.getBaseUrl()).href);
-  const html = await response.text();
-  const $ = parseHTML(html);
-  return $('main').html() || '';
-}
-```
-
-### `parseChapterResource`
-
-`parseChapterResource` is optional for text and HTML-only plugins. A plugin that
-returns `ChapterItem.contentType: 'pdf'` or `'epub'` for any chapter must
-implement it and return an `ArrayBuffer` or `Uint8Array`; do not return base64,
-token-bearing URLs, request headers, or request init objects in plugin output.
-`parseChapter()` remains required and should return a readable HTML fallback for
-the same chapter path.
-
-```ts
-type ChapterBinaryResource = {
-  type: 'binary';
-  contentType: 'pdf' | 'epub';
-  mediaType: 'application/pdf' | 'application/epub+zip';
-  filename?: string;
-  byteLength: number;
-  bytes: ArrayBuffer | Uint8Array;
-  sha256?: string;
-  fallbackHtml?: string;
-};
-```
-
-Plugins must fetch protected binary resources themselves through host-supported
-fetch helpers and return only bytes plus metadata. Private raw/download URLs,
-authorization headers, cookies, and request options must not appear in
-`NovelItem.path`, `ChapterItem.path`, `parseChapter()` output, or
-`parseChapterResource()` output.
-
-```ts
-async parseChapterResource(
-  chapterPath: string,
-): Promise<Plugin.ChapterBinaryResource> {
-  const response = await fetchApi(new URL(chapterPath, this.getBaseUrl()).href);
-  const bytes = await response.arrayBuffer();
-
-  return {
-    type: 'binary',
-    contentType: 'pdf',
-    mediaType: 'application/pdf',
-    filename: 'chapter.pdf',
-    byteLength: bytes.byteLength,
-    bytes,
-    fallbackHtml: '<p>PDF resource attached.</p>',
-  };
-}
-```
-
-### `searchNovels`
-
-Return source items for the requested search term and one-based page number.
-Return an empty array when there are no results or when the connector is not
-configured enough to search.
-
-```ts
-async searchNovels(
-  searchTerm: string,
-  pageNo: number,
-): Promise<Plugin.NovelItem[]> {
-  if (!searchTerm.trim()) return this.popularNovels(pageNo, {
-    showLatestNovels: false,
-    filters: {} as never,
-  });
-
-  return [];
-}
-```
-
-## NovelItem
-
-`NovelItem` is the lightweight result shown in source listings and search.
-
-| Field   | Type     | Required | Description                                                                            |
-| ------- | -------- | -------- | -------------------------------------------------------------------------------------- |
-| `name`  | `string` | yes      | Title shown in listings.                                                               |
-| `path`  | `string` | yes      | Opaque plugin-owned identifier.                                                        |
-| `cover` | `string` | no       | Cover URL. Relative URLs should be resolvable by the host or normalized by the plugin. |
-
-`path` does not have to be a browser URL. It can be a relative path, an API id,
-or an encoded payload as long as the same plugin can handle it later.
-
-## SourceNovel
-
-`SourceNovel` extends `NovelItem` with metadata and chapters.
-
-| Field      | Type            | Required | Description                                                                 |
-| ---------- | --------------- | -------- | --------------------------------------------------------------------------- |
-| `name`     | `string`        | yes      | Novel title.                                                                |
-| `path`     | `string`        | yes      | Same opaque path passed to `parseNovel`.                                    |
-| `cover`    | `string`        | no       | Cover URL.                                                                  |
-| `genres`   | `string`        | no       | Comma-separated genre list.                                                 |
-| `summary`  | `string`        | no       | Plain text or simple HTML summary.                                          |
-| `author`   | `string`        | no       | Author names.                                                               |
-| `artist`   | `string`        | no       | Artist names.                                                               |
-| `status`   | `string`        | no       | Reading/publication status. Prefer values from `NovelStatus` when possible. |
-| `rating`   | `number`        | no       | Rating out of 5.                                                            |
-| `chapters` | `ChapterItem[]` | yes      | Chapter list. Use an empty array when known empty.                          |
-
-## ChapterItem
-
-`ChapterItem` is the lightweight chapter row stored by the host.
-
-| Field           | Type                                     | Required | Description                                                                                                                                                                               |
-| --------------- | ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`          | `string`                                 | yes      | Chapter label shown in the reader.                                                                                                                                                        |
-| `path`          | `string`                                 | yes      | Opaque plugin-owned chapter identifier.                                                                                                                                                   |
-| `contentType`   | `'html'`, `'text'`, `'pdf'`, or `'epub'` | no       | Per-chapter content type. Defaults to `'html'` for legacy plugins.                                                                                                                        |
-| `releaseTime`   | `string` or `null`                       | no       | ISO date, `YYYY-MM-DD`, or source-provided date string.                                                                                                                                   |
-| `chapterNumber` | `number`                                 | yes      | Stable numeric ordering key within the novel. Use the source number when available; otherwise calculate a deterministic one-based reading-order number. Values must be finite and unique. |
-| `page`          | `string`                                 | no       | Pagination cursor for page-based plugins.                                                                                                                                                 |
-
-For PDF and EPUB chapters, set `contentType` to `'pdf'` or `'epub'`, keep
-`path` as an opaque plugin-owned identifier, and implement `parseChapter()` as a
-safe readable fallback. Also implement `parseChapterResource()` so the host can
-receive the actual binary bytes as `ArrayBuffer` or `Uint8Array`. If the plugin
-cannot return those bytes, do not mark the chapter as `'pdf'` or `'epub'`; use
-an HTML fallback chapter instead.
-
-## Filters
-
-Filters define controls shown for `popularNovels`. The host passes selected
-values back as `{ type, value }` pairs in `options.filters`.
-
-```ts
-filters = {
-  order: {
-    label: 'Order',
-    type: FilterTypes.Picker,
-    value: 'popular',
-    options: [
-      { label: 'Popular', value: 'popular' },
-      { label: 'Newest', value: 'newest' },
-    ],
-  },
-  completedOnly: {
-    label: 'Completed only',
-    type: FilterTypes.Switch,
-    value: false,
-  },
-} satisfies Filters;
-```
-
-| FilterTypes member        | Runtime value | `value` type                                 | Requires `options` |
-| ------------------------- | ------------- | -------------------------------------------- | ------------------ |
-| `Picker`                  | `Picker`      | `string`                                     | yes                |
-| `TextInput`               | `Text`        | `string`                                     | no                 |
-| `Switch`                  | `Switch`      | `boolean`                                    | no                 |
-| `CheckboxGroup`           | `Checkbox`    | `string[]`                                   | yes                |
-| `ExcludableCheckboxGroup` | `XCheckbox`   | `{ include?: string[]; exclude?: string[] }` | yes                |
-
-Use `include` and `exclude` property names for excludable checkbox values.
-
-```ts
-filters = {
-  genres: {
-    label: 'Genres',
-    type: FilterTypes.ExcludableCheckboxGroup,
-    value: { include: [], exclude: [] },
-    options: [
-      { label: 'Fantasy', value: 'fantasy' },
-      { label: 'Romance', value: 'romance' },
-    ],
-  },
-} satisfies Filters;
-```
-
-## Plugin Inputs
-
-Norea owns the canonical input contract:
-
-<https://github.com/tinywind/norea/blob/main/docs/plugins/contract.md#app-managed-plugin-inputs>
-
-Use `pluginInputs` for user-provided values such as a self-hosted server URL,
-username, password, token, or feature toggle. Keep `pluginSettings` as an alias
-only when older hosts need it, and make plugin methods tolerate missing values.
-
-```ts
-pluginInputs = {
-  url: {
-    value: '',
-    label: 'Server URL',
-    type: 'Url',
-    required: true,
-  },
-  hideLocked: {
-    value: false,
-    label: 'Hide locked chapters',
-    type: 'Switch',
-  },
-};
-
-pluginSettings = pluginInputs;
-```
-
-Read values at request time instead of caching them in class fields. This keeps
-the plugin correct after a user changes settings.
-
-```ts
-import { inputs } from '@libs/pluginInputs';
-
-function serverUrl() {
-  return inputs.get('url')?.trim() || '';
-}
-```
-
-## Using Cheerio
-
-Use Cheerio for HTML/XML parsing instead of regular expressions.
-
-```ts
-import { load as parseHTML } from 'cheerio';
-
-const $ = parseHTML(html);
-const title = $('h1').first().text().trim();
-const chapters = $('a.chapter')
-  .map((index, link) => ({
-    name: $(link).text().trim(),
-    path: $(link).attr('href') || '',
-    chapterNumber: index + 1,
-  }))
-  .get()
-  .filter(chapter => chapter.name && chapter.path);
-```
-
-For XML or OPDS feeds, enable XML mode:
-
-```ts
-const $ = parseHTML(xml, { xmlMode: true });
-```
-
-## Fetching
-
-Use `@libs/fetch` helpers for plugin-owned network requests. In Norea,
-these route through the host plugin fetch path.
-
-```ts
-import { fetchApi, fetchText } from '@libs/fetch';
-
-const response = await fetchApi('https://example.com/api/books', {
-  headers: {
-    Accept: 'application/json',
-  },
-});
-const data = JSON.parse(await response.text());
-
-const html = await fetchText('https://example.com/book/1');
-```
-
-Use `appFetch` only for official API or repository-owned requests that should
-use the host's app-native HTTP path instead of the scraper WebView session.
-
-```ts
-import { appFetch } from '@libs/fetch';
-
-const response = await appFetch('https://api.github.com/repos/owner/repo', {
-  headers: {
-    Accept: 'application/vnd.github+json',
-  },
-});
-```
-
-When a scraper-backed request should use a different browser preparation URL
-than `getBaseUrl()`, pass `contextUrl`. This is useful for source APIs whose
-homepage is slow or unrelated to API fetches.
-
-```ts
-await fetchApi('https://library.oapen.org/rest/search?query=dc.type:book', {
-  headers: {
-    Accept: 'application/json',
-  },
-  contextUrl:
-    'https://library.oapen.org/rest/search?query=dc.type:book&limit=1',
-});
-```
-
-Use `@libs/webView` only when a source needs a rendered scraper WebView page
-instead of a browser `fetch()` call. These helpers use the app's task-owned
-scraper WebView session.
-
-```ts
-import { webViewFetch, webViewLoad, webViewNavigate } from '@libs/webView';
-
-const loaded = await webViewLoad('https://example.com/book/1');
-const html = loaded.html;
-
-const position = await webViewNavigate('https://example.com/account');
-
-const raw = await webViewFetch('https://example.com/chapter/1', {
-  beforeContentScript: `
-    window.addEventListener('DOMContentLoaded', function () {
-      window.ReactNativeWebView.postMessage(document.body.innerHTML);
-    });
-  `,
-});
-```
-
-`webViewFetch()` is a low-level extractor: plugin code must call
-`window.ReactNativeWebView.postMessage(payload)`. `webViewLoad()` waits for the
-document to be ready and returns `{ html, text, url, title }`.
-`webViewNavigate()` returns `{ url, title? }` after navigating the task-owned
-scraper WebView. For `webViewLoad()` and `webViewNavigate()`, do not call
-`ReactNativeWebView.postMessage` from `beforeContentScript`; the host owns the
-result message. These helpers do not replace manual challenge clearing; open the
-site browser in the app first when a site requires user interaction.
-
-Avoid bare `fetch` unless you have verified it is supported by the host contract.
-Do not log credentials, cookies, tokens, or full request bodies.
-
-## Storage
-
-`@libs/pluginInputs` exposes app-managed input values declared by
-`pluginInputs`. `@libs/storage` remains available for plugin-owned state.
-
-```ts
-import { storage } from '@libs/storage';
-
-storage.set('lastQuery', 'love');
-const lastQuery = storage.get('lastQuery');
-storage.delete('lastQuery');
-```
-
-In Norea, storage is namespaced by plugin id. Do not store secrets unless
-the host explicitly supports the required security model. `type: 'Password'`
-only masks the input UI; it is not an encryption boundary.
+See `docs/quickstart.md` and `docs/plugin-template.ts` for a minimal source.

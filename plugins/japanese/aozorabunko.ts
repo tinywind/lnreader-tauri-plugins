@@ -1,5 +1,3 @@
-import { load as parseHTML } from 'cheerio';
-
 import { readZipText } from '@libs/archive';
 import { parseCsv } from '@libs/csv';
 import { fetchApi } from '@libs/fetch';
@@ -174,6 +172,7 @@ async function loadCatalog() {
 }
 
 class AozoraBunko implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
   id = 'aozora-bunko';
   name = 'Aozora Bunko';
   version = '0.1.0';
@@ -259,21 +258,25 @@ class AozoraBunko implements Plugin.PluginBase {
     return this.parseNovel(novelPath);
   }
 
-  async parseChapter(chapterPathValue: string) {
+  getChapterAcquisitionPlan(
+    chapterPathValue: string,
+  ): Plugin.ChapterAcquisitionPlan {
     if (chapterPathValue.startsWith(HTML_PREFIX)) {
-      const { encoding, url } = parseChapterPath(chapterPathValue, HTML_PREFIX);
-      const response = await fetchApi(url);
-      const html = decodeBytes(await response.arrayBuffer(), encoding);
-      const $ = parseHTML(html);
-      $('script, style, nav').remove();
-      $('img[src], a[href]').each((_, element) => {
-        const attrName = $(element).is('img') ? 'src' : 'href';
-        const attrValue = $(element).attr(attrName);
-        if (attrValue) $(element).attr(attrName, new URL(attrValue, url).href);
-      });
-      return $('.main_text').first().html() || $('body').html() || '';
+      return {
+        type: 'page',
+        url: parseChapterPath(chapterPathValue, HTML_PREFIX).url,
+        contentSelector: '.main_text, body',
+        excludeSelectors: ['nav'],
+        loadStrategy: 'network-idle',
+      };
     }
+    if (chapterPathValue.startsWith(TEXT_PREFIX)) return { type: 'resource' };
+    throw new Error('Aozora Bunko chapter path is invalid.');
+  }
 
+  async getChapterResource(
+    chapterPathValue: string,
+  ): Promise<Plugin.ChapterResource> {
     if (chapterPathValue.startsWith(TEXT_PREFIX)) {
       const { encoding, url } = parseChapterPath(chapterPathValue, TEXT_PREFIX);
       const response = await fetchApi(
@@ -283,19 +286,26 @@ class AozoraBunko implements Plugin.PluginBase {
       const body = await response.arrayBuffer();
 
       if (!/\.zip$/i.test(url)) {
-        return cleanAozoraText(decodeBytes(body, encoding));
+        return {
+          type: 'content',
+          contentType: 'text',
+          content: cleanAozoraText(decodeBytes(body, encoding)),
+        };
       }
 
-      return cleanAozoraText(
-        await readZipText(body, {
-          extension: 'txt',
-          encoding,
-          maxBytes: ZIP_TEXT_MAX_BYTES,
-        }),
-      );
+      return {
+        type: 'content',
+        contentType: 'text',
+        content: cleanAozoraText(
+          await readZipText(body, {
+            extension: 'txt',
+            encoding,
+            maxBytes: ZIP_TEXT_MAX_BYTES,
+          }),
+        ),
+      };
     }
-
-    return '';
+    throw new Error('Aozora Bunko chapter is not a resource chapter.');
   }
 
   resolveUrl(path: string) {

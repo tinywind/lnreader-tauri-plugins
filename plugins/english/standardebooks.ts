@@ -27,6 +27,7 @@ function requestUrl(path: string) {
 }
 
 class StandardEbooks implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
   id = 'standard-ebooks';
   name = 'Standard Ebooks';
   version = '0.1.0';
@@ -109,13 +110,16 @@ class StandardEbooks implements Plugin.PluginBase {
     return this.parseNovel(novelPath);
   }
 
-  async parseChapter(chapterPath: string): Promise<string> {
-    const response = await fetchApi(requestUrl(chapterPath));
-    const html = await response.text();
-    const $ = parseHTML(html);
-    const main = $('main').first();
-    main.find('nav, header, script, style').remove();
-    return main.html() || $('body').html() || '';
+  getChapterAcquisitionPlan(
+    chapterPath: string,
+  ): Plugin.ChapterAcquisitionPlan {
+    return {
+      type: 'page',
+      url: requestUrl(chapterPath),
+      contentSelector: 'main, body',
+      excludeSelectors: ['nav', 'header'],
+      loadStrategy: 'network-idle',
+    };
   }
 
   resolveUrl(path: string) {

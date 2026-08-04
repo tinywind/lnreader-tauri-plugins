@@ -67,7 +67,7 @@ function bytesToBlob(resource: Plugin.ChapterBinaryResource) {
 function downloadResource(resource: LoadedBinaryResource) {
   const link = document.createElement('a');
   link.href = resource.objectUrl;
-  link.download = resource.filename || `chapter.${resource.contentType}`;
+  link.download = `chapter.${resource.contentType}`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -108,8 +108,12 @@ function binaryResourceChecks(
     },
     {
       label: 'Declared size',
-      detail: `${formatBytes(resource.byteLength)} reported by resource`,
-      passed: resource.byteLength === byteLength,
+      detail:
+        resource.byteLength === undefined
+          ? 'Not declared'
+          : `${formatBytes(resource.byteLength)} reported by resource`,
+      passed:
+        resource.byteLength === undefined || resource.byteLength === byteLength,
     },
     {
       label: 'Media type',
@@ -118,7 +122,7 @@ function binaryResourceChecks(
     },
     {
       label: 'Download URL',
-      detail: resource.filename || resource.objectUrl,
+      detail: resource.objectUrl,
       passed: resource.objectUrl.startsWith('blob:'),
     },
   ];
@@ -225,11 +229,21 @@ export default function ParseChapterSection() {
       setEpubPreviewError('');
       setPreviewStatus('idle');
       try {
-        if (
-          (contentType === 'pdf' || contentType === 'epub') &&
-          plugin.parseChapterResource
-        ) {
-          const result = await plugin.parseChapterResource(path);
+        const plan = plugin.getChapterAcquisitionPlan(path, contentType);
+        if (plan.type === 'page') {
+          setChapterText(
+            `<article><h2>Host page capture plan</h2><pre>${escapeHtml(
+              JSON.stringify(plan, null, 2),
+            )}</pre></article>`,
+          );
+          setChapterContentType('html');
+        } else if (plugin.getChapterResource) {
+          const result = await plugin.getChapterResource(path, contentType);
+          if (result.type === 'content') {
+            setChapterText(result.content);
+            setChapterContentType(result.contentType);
+            return;
+          }
           const objectUrl = URL.createObjectURL(bytesToBlob(result));
           let nextEpubPreview: EpubPreviewResult | undefined;
           let nextEpubPreviewError = '';
@@ -253,12 +267,12 @@ export default function ParseChapterSection() {
               ? 'loading'
               : 'failed',
           );
-          setChapterText(result.fallbackHtml || '');
+          setChapterText('');
           setChapterContentType(result.contentType);
         } else {
-          const result = await plugin.parseChapter(path);
-          setChapterText(result);
-          setChapterContentType(contentType);
+          throw new Error(
+            'Plugin must implement getChapterResource() for resource plans.',
+          );
         }
       } catch (error) {
         const errorMessage =

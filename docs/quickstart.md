@@ -1,64 +1,82 @@
-# Quick start
+# Plugin quickstart
 
-1. [Requirements](#requirements)
-2. [Single plugin guide](#guide)
-3. [Multi-src guide](#creating-multi-src-plugins)
+Norea plugins implement the 0.2 source contract from
+`src/types/plugin.ts`. Start from `docs/plugin-template.ts`.
 
-### Requirements
-
-- [git](https://git-scm.com/doc/ext) basics
-- TypeScript or JavaScript basics
-- Node >=18
-- Dependencies installed with `npm i`
-- The canonical [Norea plugin contract](https://github.com/tinywind/norea/blob/main/docs/plugins/contract.md) for supported runtime APIs, sandbox rules, and source plugin data contracts
-
-### Guide
-
-1. Create plugin script in `/plugins` [<span style="font-size: 0.8rem;">(learn more)</span>](#creating-plugin-script)
-2. Copy code from [plugin-template.ts](./plugin-template.ts)
-3. Start coding [<span style="font-size:0.8rem">(documentation)</span>](./docs.md)
-
-#### Creating plugin script
-
-1. Remember to create your plugin inside the language folder corresponding to the language of the novels
-2. File should have the `.ts` extension
-   Example `plugins/english/nobleMTL.ts`
-3. Add an icon under `public/static/src/<lang>/<plugin-id>/icon.png`
-4. Set the plugin's `icon` field to the same path without the `public/static/` prefix
-
-> [!WARNING]
-> Icon size should be 96x96px!
-
-Example:
+## Required identity
 
 ```ts
-icon = 'src/english/example/icon.png';
+class ExampleSource implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
+  id = 'example-source';
+  name = 'Example Source';
+  version = '1.0.0';
+  icon = 'siteNotAvailable.png';
+}
 ```
 
-### Creating multi-source plugins
+Use a stable lowercase kebab-case ID. `apiVersion` is the host contract
+version; `version` is the source plugin release version.
 
-Use the `multi` folder for plugins that are language-agnostic, self-hosted, or
-catalog sources that are not tied to one novel language.
+## Required methods
 
-```text
-plugins/multi/example.ts
-public/static/src/multi/example/icon.png
+Implement `getBaseUrl`, `popularNovels`, `searchNovels`, `parseNovel`,
+`parseNovelSince`, and `getChapterAcquisitionPlan`.
+
+Each chapter needs a stable numeric `chapterNumber`, a path, and an optional
+`contentType`. The default content type is `html`.
+
+## Page chapters
+
+Normal website chapters use a page plan:
+
+```ts
+getChapterAcquisitionPlan(
+  chapterPath: string,
+): Plugin.ChapterAcquisitionPlan {
+  return {
+    type: 'page',
+    url: new URL(chapterPath, this.getBaseUrl()).href,
+    contentSelector: '.chapter-content',
+    excludeSelectors: ['.advertisement'],
+    loadStrategy: 'network-idle',
+  };
+}
 ```
 
-Multi-source plugins still follow the same `Plugin.PluginBase` contract and
-must return `path` fields, not `url` fields.
+The Norea host navigates the scraper WebView, captures the selected DOM,
+stores partial HTML, downloads media with the global resource slot limit, and
+resumes from its manifest. Preserve signed query parameters and access keys in
+the plan URL.
 
-Every source plugin must implement both `parseNovel()` and
-`parseNovelSince(novelPath, sinceChapterNumber)`. Every chapter returned from
-`parseNovel()`, `parseNovelSince()`, or `parsePage()` must include a finite,
-unique `chapterNumber`. Use the source-provided chapter number when one exists;
-otherwise calculate a one-based reading-order number in the plugin.
+Rendered or shadow-DOM content may use `documentStartScript` to place the final
+content in a synthetic light-DOM container. The script must not post its own
+capture result. Add `data-norea-manual-action` when login, a challenge, or a
+paid gate needs user interaction.
 
-PDF and EPUB chapters should set `contentType` to `pdf` or `epub`. Keep
-`parseChapter()` as a readable HTML fallback and implement
-`parseChapterResource()` when the plugin can pass the actual binary bytes as an
-`ArrayBuffer` or `Uint8Array`.
+## Resource chapters
 
-When a source needs a rendered scraper WebView page rather than a browser fetch,
-use `@libs/webView` helpers. The canonical contract defines
-`webViewFetch()`, `webViewLoad()`, and `webViewNavigate()`.
+Use `{ type: 'resource' }` only for non-page APIs, archives, PDF, or EPUB.
+Implement `getChapterResource` and return either a text-like content resource
+or a binary resource.
+
+```ts
+getChapterAcquisitionPlan(): Plugin.ChapterAcquisitionPlan {
+  return { type: 'resource' };
+}
+
+async getChapterResource(path: string): Promise<Plugin.ChapterResource> {
+  const response = await fetchApi(path);
+  const bytes = await response.arrayBuffer();
+  return {
+    type: 'binary',
+    contentType: 'pdf',
+    mediaType: 'application/pdf',
+    bytes,
+    byteLength: bytes.byteLength,
+  };
+}
+```
+
+Use sanctioned fetch shims for all plugin-owned source traffic. Do not copy
+cookies into a separate HTTP client.

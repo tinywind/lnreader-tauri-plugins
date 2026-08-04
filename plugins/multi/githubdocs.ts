@@ -298,6 +298,7 @@ function naturalCompare(left: string, right: string) {
 }
 
 class GitHubDocs implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
   id = 'github-docs';
   name = 'GitHub Docs';
   version = '0.1.0';
@@ -358,12 +359,33 @@ class GitHubDocs implements Plugin.PluginBase {
     };
   }
 
-  async parseChapter(chapterPath: string): Promise<string> {
+  getChapterAcquisitionPlan(): Plugin.ChapterAcquisitionPlan {
+    return { type: 'resource' };
+  }
+
+  async getChapterResource(
+    chapterPath: string,
+  ): Promise<Plugin.ChapterResource> {
     const payload = decodePayload<ChapterPayload>(CHAPTER_PREFIX, chapterPath);
     this.ensureConfiguredRepo(payload);
 
     if (payload.contentType === 'pdf' || payload.contentType === 'epub') {
-      return this.binaryFallbackHtml(payload);
+      if (payload.size > this.maxBinaryBytes()) {
+        throw new Error('GitHub Docs binary resource exceeds the size limit.');
+      }
+      const response = await this.fetchBlob(
+        payload,
+        'application/vnd.github.raw+json',
+      );
+      const bytes = await response.arrayBuffer();
+      return {
+        type: 'binary',
+        contentType: payload.contentType,
+        mediaType: binaryMediaType(payload.contentType),
+        filename: fileName(payload.filePath),
+        byteLength: bytes.byteLength,
+        bytes,
+      };
     }
 
     const response = await this.fetchBlob(
@@ -371,40 +393,16 @@ class GitHubDocs implements Plugin.PluginBase {
       'application/vnd.github.raw+json',
     );
     const text = await response.text();
-
-    if (payload.contentType === 'text') return text;
-    if (/\.(md|markdown)$/i.test(payload.filePath)) {
-      return this.renderMarkdown(text, payload);
-    }
-    return sanitizeHtml(text, !payload.private);
-  }
-
-  async parseChapterResource(
-    chapterPath: string,
-  ): Promise<Plugin.ChapterBinaryResource> {
-    const payload = decodePayload<ChapterPayload>(CHAPTER_PREFIX, chapterPath);
-    this.ensureConfiguredRepo(payload);
-    if (payload.contentType !== 'pdf' && payload.contentType !== 'epub') {
-      throw new Error('GitHub Docs chapter is not a binary resource.');
-    }
-    if (payload.size > this.maxBinaryBytes()) {
-      throw new Error('GitHub Docs binary resource exceeds the size limit.');
-    }
-
-    const response = await this.fetchBlob(
-      payload,
-      'application/vnd.github.raw+json',
-    );
-    const bytes = await response.arrayBuffer();
-
     return {
-      type: 'binary',
+      type: 'content',
       contentType: payload.contentType,
-      mediaType: binaryMediaType(payload.contentType),
-      filename: fileName(payload.filePath),
-      byteLength: bytes.byteLength,
-      bytes,
-      fallbackHtml: this.binaryFallbackHtml(payload),
+      content:
+        payload.contentType === 'text'
+          ? text
+          : /\.(md|markdown)$/i.test(payload.filePath)
+            ? this.renderMarkdown(text, payload)
+            : sanitizeHtml(text, !payload.private),
+      baseUrl: this.resolveUrl(chapterPath),
     };
   }
 
@@ -622,7 +620,7 @@ class GitHubDocs implements Plugin.PluginBase {
   private isConfigured() {
     return Boolean(
       inputValue('repository') ||
-        (inputValue('repositories') && inputValue('workPathPattern')),
+      (inputValue('repositories') && inputValue('workPathPattern')),
     );
   }
 
@@ -850,16 +848,6 @@ class GitHubDocs implements Plugin.PluginBase {
       }),
     });
     return sanitizeHtml(await response.text(), !payload.private);
-  }
-
-  private binaryFallbackHtml(payload: ChapterPayload) {
-    const label = payload.contentType.toUpperCase();
-    return [
-      '<article>',
-      `<p>${label} binary resource is available through Norea.</p>`,
-      `<p>Filename: ${escapeHtml(fileName(payload.filePath))}</p>`,
-      '</article>',
-    ].join('');
   }
 
   private async fetchBlob(payload: ChapterPayload, accept: string) {

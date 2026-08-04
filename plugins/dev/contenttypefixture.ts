@@ -21,6 +21,7 @@ function fixtureRootUrl(): string {
 }
 
 class ContentTypeFixturePlugin implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
   id = 'dev-content-type-fixture';
   name = 'Dev Content Type Fixture';
   version = '0.1.1';
@@ -86,22 +87,22 @@ class ContentTypeFixturePlugin implements Plugin.PluginBase {
     return this.parseNovel(novelPath);
   }
 
-  async parseChapter(chapterPath: string): Promise<string> {
-    const rootUrl = this.fixtureRootUrl();
-
-    if (chapterPath.endsWith('/chapters/pdf/chapter-1.pdf')) {
-      return `<p>This fixture chapter is backed by a PDF file. <a href="${chapterPath}">Open the local PDF fixture</a>.</p>`;
-    }
-
-    const response = await fetchApi(chapterPath, {
-      contextUrl: rootUrl,
-    });
-    return response.text();
+  getChapterAcquisitionPlan(
+    chapterPath: string,
+    contentType: Plugin.ChapterContentType,
+  ): Plugin.ChapterAcquisitionPlan {
+    if (contentType === 'pdf') return { type: 'resource' };
+    return {
+      type: 'page',
+      url: chapterPath,
+      contentSelector: 'body',
+      loadStrategy: 'network-idle',
+    };
   }
 
-  async parseChapterResource(
+  async getChapterResource(
     chapterPath: string,
-  ): Promise<Plugin.ChapterBinaryResource> {
+  ): Promise<Plugin.ChapterResource> {
     if (!chapterPath.endsWith('/chapters/pdf/chapter-1.pdf')) {
       throw new Error('Fixture chapter is not a PDF resource.');
     }
@@ -110,6 +111,11 @@ class ContentTypeFixturePlugin implements Plugin.PluginBase {
       contextUrl: this.fixtureRootUrl(),
       headers: { Accept: 'application/pdf, */*' },
     });
+    if (!response.ok) {
+      throw new Error(
+        `Fixture PDF request failed with HTTP ${response.status}.`,
+      );
+    }
     const bytes = await response.arrayBuffer();
 
     return {

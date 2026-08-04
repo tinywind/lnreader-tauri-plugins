@@ -8,7 +8,16 @@ This repository starts from the upstream plugin repository shape, but it intenti
 
 The canonical plugin runtime, sandbox, whitelist, and host capability contract is maintained in [Norea's plugin contract](https://github.com/tinywind/norea/blob/main/docs/plugins/contract.md). Keep this repository focused on sample plugins and source policy; mirror only the author-facing requirements needed to keep samples compatible.
 
-Current source plugins must provide `parseNovel()`, `parseNovelSince(novelPath, sinceChapterNumber)`, and `chapterNumber` on every returned chapter. `parseNovel()` returns full metadata and the full chapter list. `parseNovelSince()` returns the same metadata fields but may return only chapters whose `chapterNumber` is greater than or equal to `sinceChapterNumber`; plugins that cannot optimize may return the full chapter list. Chapter numbers are plugin-owned stable ordering keys, must be numeric, must be unique within a novel, and must be sorted in reading order.
+Current source plugins must declare `apiVersion = '0.2' as const`, provide
+`getChapterAcquisitionPlan()`, `parseNovel()`, and
+`parseNovelSince(novelPath, sinceChapterNumber)`, and return `chapterNumber` on
+every chapter. Resource plans also require `getChapterResource()`.
+`parseNovel()` returns full metadata and the full chapter list.
+`parseNovelSince()` returns the same metadata fields but may return only
+chapters whose `chapterNumber` is greater than or equal to
+`sinceChapterNumber`; plugins that cannot optimize may return the full chapter
+list. Chapter numbers are plugin-owned stable ordering keys, must be numeric,
+must be unique within a novel, and must be sorted in reading order.
 
 ## Included Samples
 
@@ -103,8 +112,8 @@ npm run dev:start
 The `Dev Content Type Fixture` plugin is available when the local dev server is
 running. Use it from the playground or from a local Norea build pointed at this
 repository's dev manifest to smoke test three chapter rows: HTML with relative
-media references, raw plain text, and a PDF-backed chapter with an HTML fallback
-link. The fixture is excluded from the production manifest; `build:manifest:dev`
+media references, raw plain text, and a PDF-backed chapter. The fixture is
+excluded from the production manifest; `build:manifest:dev`
 includes it through an explicit dev-only manifest flag. The static files live
 under `public/static/fixtures/content-types/`.
 
@@ -146,8 +155,13 @@ npm run verify:plugins
 The published manifest is expected at:
 
 ```text
-https://raw.githubusercontent.com/tinywind/norea-plugins/plugins/v0.1.0/.dist/plugins.min.json
+https://raw.githubusercontent.com/tinywind/norea-plugins/plugins/v0.2.0/.dist/plugins.min.json
 ```
+
+## Compatibility
+
+The 0.2 plugin contract does not guarantee compatibility with 0.1 plugins or
+0.1 hosts.
 
 ## Project Layout
 

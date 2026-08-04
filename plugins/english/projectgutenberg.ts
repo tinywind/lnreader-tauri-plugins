@@ -69,6 +69,7 @@ function extractField(content: string, label: string, stopLabels: string[]) {
 }
 
 class ProjectGutenberg implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
   id = 'project-gutenberg';
   name = 'Project Gutenberg';
   version = '0.1.0';
@@ -147,29 +148,20 @@ class ProjectGutenberg implements Plugin.PluginBase {
     return this.parseNovel(novelPath);
   }
 
-  async parseChapter(chapterPath: string) {
-    if (!chapterPath.startsWith(HTML_PREFIX)) return '';
-
+  getChapterAcquisitionPlan(
+    chapterPath: string,
+  ): Plugin.ChapterAcquisitionPlan {
+    if (!chapterPath.startsWith(HTML_PREFIX)) {
+      throw new Error('Project Gutenberg chapter path is invalid.');
+    }
     const bookId = chapterPath.slice(HTML_PREFIX.length);
-    const result = await fetchApi(
-      htmlUrlForBook(bookId),
-      requestInit('text/html, */*;q=0.8'),
-    );
-    const html = await result.text();
-    const $ = parseHTML(html);
-    $('script, style, nav, #pg-header, #pg-footer, .pg-boilerplate').remove();
-    $('img[src], a[href]').each((_, element) => {
-      const attrName = $(element).is('img') ? 'src' : 'href';
-      const attrValue = $(element).attr(attrName);
-      if (attrValue) {
-        $(element).attr(
-          attrName,
-          new URL(attrValue, htmlUrlForBook(bookId)).href,
-        );
-      }
-    });
-
-    return $('body').html() || '';
+    return {
+      type: 'page',
+      url: htmlUrlForBook(bookId),
+      contentSelector: 'body',
+      excludeSelectors: ['nav', '#pg-header', '#pg-footer', '.pg-boilerplate'],
+      loadStrategy: 'network-idle',
+    };
   }
 
   resolveUrl(path: string) {

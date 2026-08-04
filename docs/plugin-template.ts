@@ -1,82 +1,40 @@
-import { fetchApi, fetchProto, fetchText } from '@libs/fetch';
+import { fetchApi } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
-import { Filters } from '@libs/filterInputs';
-import { load as loadCheerio } from 'cheerio';
-import { defaultCover } from '@libs/defaultCover';
-import { NovelStatus } from '@libs/novelStatus';
-// import { isUrlAbsolute } from '@libs/isAbsoluteUrl';
-// import { storage, localStorage, sessionStorage } from '@libs/storage';
-// import { webViewFetch, webViewLoad, webViewNavigate } from '@libs/webView';
-// import { encode, decode } from 'urlencode';
-// import dayjs from 'dayjs';
-// import { Parser } from 'htmlparser2';
 
 class TemplatePlugin implements Plugin.PluginBase {
-  id = '';
-  name = '';
-  icon = '';
-  getBaseUrl(): string {
-    return 'https://example.com';
-  }
+  apiVersion = '0.2' as const;
+  id = 'example-source';
+  name = 'Example Source';
   version = '1.0.0';
-  filters: Filters | undefined = undefined;
-  imageRequestInit?: Plugin.ImageRequestInit | undefined = undefined;
+  icon = 'siteNotAvailable.png';
 
-  //flag indicates whether access to LocalStorage, SesesionStorage is required.
-  webStorageUtilized?: boolean;
-
-  async popularNovels(
-    pageNo: number,
-    {
-      showLatestNovels,
-      filters,
-    }: Plugin.PopularNovelsOptions<typeof this.filters>,
-  ): Promise<Plugin.NovelItem[]> {
-    const novels: Plugin.NovelItem[] = [];
-
-    /** Add your fetching code here */
-    novels.push({
-      name: 'Novel1',
-      path: '/novels/1',
-      cover: defaultCover,
-    });
-    return novels;
+  getBaseUrl(): string {
+    return 'https://example.com/';
   }
+
+  async popularNovels(): Promise<Plugin.NovelItem[]> {
+    return [];
+  }
+
+  async searchNovels(): Promise<Plugin.NovelItem[]> {
+    return [];
+  }
+
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
-    const novel: Plugin.SourceNovel = {
+    return {
+      name: 'Example Novel',
       path: novelPath,
-      name: 'Untitled',
-      chapters: [],
+      chapters: [
+        {
+          name: 'Chapter 1',
+          path: '/novel/example/chapter-1',
+          chapterNumber: 1,
+          contentType: 'html',
+        },
+      ],
     };
-
-    // TODO: get here data from the site and
-    // un-comment and fill-in the relevant fields
-
-    // novel.name = '';
-    // novel.artist = '';
-    // novel.author = '';
-    novel.cover = defaultCover;
-    // novel.genres = '';
-    // novel.status = NovelStatus.Completed;
-    // novel.summary = '';
-
-    const chapters: Plugin.ChapterItem[] = [];
-
-    // TODO: here parse the chapter list
-
-    // TODO: add each chapter to the list using
-    const chapter: Plugin.ChapterItem = {
-      name: '',
-      path: '',
-      contentType: 'html',
-      releaseTime: '',
-      chapterNumber: 1,
-    };
-    chapters.push(chapter);
-
-    novel.chapters = chapters;
-    return novel;
   }
+
   async parseNovelSince(
     novelPath: string,
     sinceChapterNumber: number,
@@ -89,39 +47,36 @@ class TemplatePlugin implements Plugin.PluginBase {
       ),
     };
   }
-  async parseChapter(chapterPath: string): Promise<string> {
-    // Parse string chapter content here. Return raw text only when chapter.contentType is "text".
-    // Plugins returning PDF/EPUB chapter content types must implement parseChapterResource().
-    const chapterHtml = '';
-    return chapterHtml;
-  }
-  // async parseChapterResource(
-  //   chapterPath: string,
-  // ): Promise<Plugin.ChapterBinaryResource> {
-  //   const response = await fetchApi(this.resolveUrl(chapterPath));
-  //   const bytes = await response.arrayBuffer();
-  //   return {
-  //     type: 'binary',
-  //     contentType: 'pdf',
-  //     mediaType: 'application/pdf',
-  //     filename: 'chapter.pdf',
-  //     byteLength: bytes.byteLength,
-  //     bytes,
-  //   };
-  // }
-  async searchNovels(
-    searchTerm: string,
-    pageNo: number,
-  ): Promise<Plugin.NovelItem[]> {
-    const novels: Plugin.NovelItem[] = [];
 
-    // get novels using the search term
-
-    return novels;
+  getChapterAcquisitionPlan(
+    chapterPath: string,
+  ): Plugin.ChapterAcquisitionPlan {
+    return {
+      type: 'page',
+      url: new URL(chapterPath, this.getBaseUrl()).href,
+      contentSelector: 'article.chapter-content',
+      excludeSelectors: ['.advertisement'],
+      loadStrategy: 'network-idle',
+    };
   }
 
-  resolveUrl = (path: string, isNovel?: boolean) =>
-    this.getBaseUrl() + (isNovel ? '/book/' : '/chapter/') + path;
+  resolveUrl(path: string): string {
+    return new URL(path, this.getBaseUrl()).href;
+  }
+
+  async getChapterResource(
+    chapterPath: string,
+  ): Promise<Plugin.ChapterResource> {
+    const response = await fetchApi(chapterPath);
+    const bytes = await response.arrayBuffer();
+    return {
+      type: 'binary',
+      contentType: 'pdf',
+      mediaType: 'application/pdf',
+      bytes,
+      byteLength: bytes.byteLength,
+    };
+  }
 }
 
 export default new TemplatePlugin();

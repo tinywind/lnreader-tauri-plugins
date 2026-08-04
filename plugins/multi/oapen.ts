@@ -230,6 +230,7 @@ function binaryContentType(
 }
 
 class OapenLibrary implements Plugin.PluginBase {
+  apiVersion = '0.2' as const;
   id = 'oapen';
   name = 'OAPEN Library';
   version = '0.1.3';
@@ -338,8 +339,16 @@ class OapenLibrary implements Plugin.PluginBase {
     return this.parseNovel(novelPath);
   }
 
-  async parseChapter(chapterPath: string) {
-    if (!chapterPath.startsWith(FILE_PREFIX)) return '';
+  getChapterAcquisitionPlan(): Plugin.ChapterAcquisitionPlan {
+    return { type: 'resource' };
+  }
+
+  async getChapterResource(
+    chapterPath: string,
+  ): Promise<Plugin.ChapterResource> {
+    if (!chapterPath.startsWith(FILE_PREFIX)) {
+      throw new Error('OAPEN chapter is not a file resource.');
+    }
 
     const payload = decodeFilePayload(chapterPath);
     if (payload.mimeType === 'text/plain' || /\.txt$/i.test(payload.fileUrl)) {
@@ -348,29 +357,26 @@ class OapenLibrary implements Plugin.PluginBase {
         requestInit('text/plain, */*'),
       );
       const text = await response.text();
-      return text;
+      return {
+        type: 'content',
+        contentType: 'text',
+        content: text,
+      };
     }
-
-    return [
-      '<article>',
-      `<p>${escapeHtml(payload.label)} is available as an open access file from OAPEN.</p>`,
-      `<p><a href="${escapeHtml(payload.fileUrl)}">Open file</a></p>`,
-      `<p><a href="${escapeHtml(payload.recordUrl)}">View source record</a></p>`,
-      '</article>',
-    ].join('');
-  }
-
-  async parseChapterResource(
-    chapterPath: string,
-  ): Promise<Plugin.ChapterBinaryResource> {
-    if (!chapterPath.startsWith(FILE_PREFIX)) {
-      throw new Error('OAPEN chapter is not a file resource.');
-    }
-
-    const payload = decodeFilePayload(chapterPath);
     const mediaType = binaryMediaType(payload);
     if (!mediaType) {
-      throw new Error(`${payload.label} is not a binary PDF/EPUB resource.`);
+      return {
+        type: 'content',
+        contentType: 'html',
+        content: [
+          '<article>',
+          `<p>${escapeHtml(payload.label)} is available as an open access file from OAPEN.</p>`,
+          `<p><a href="${escapeHtml(payload.fileUrl)}">Open file</a></p>`,
+          `<p><a href="${escapeHtml(payload.recordUrl)}">View source record</a></p>`,
+          '</article>',
+        ].join(''),
+        baseUrl: payload.recordUrl,
+      };
     }
 
     const response = await fetchApi(
