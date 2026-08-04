@@ -11,7 +11,7 @@ if ($exists) {
 
 Remove-Item -Recurse -Force .dist, .js, total.svg -ErrorAction SilentlyContinue
 node scripts/generate-plugin-index.js
-npx tsc --project tsconfig.production.json
+npm run build:compile
 $env:BRANCH = $dist
 npm run build:manifest
 Remove-Item Env:BRANCH -ErrorAction SilentlyContinue

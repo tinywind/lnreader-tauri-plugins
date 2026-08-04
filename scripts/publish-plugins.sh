@@ -63,7 +63,7 @@ fi
   cd "$worktree"
   rm -rf .dist .js total.svg
   node scripts/generate-plugin-index.js
-  npx tsc --project tsconfig.production.json
+  npm run build:compile
   USER_CONTENT_BASE="$raw_base" BRANCH="$dist" npm run build:manifest
   npm run verify:plugins
 )
