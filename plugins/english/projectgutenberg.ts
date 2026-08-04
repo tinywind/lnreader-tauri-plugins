@@ -159,7 +159,13 @@ class ProjectGutenberg implements Plugin.PluginBase {
       type: 'page',
       url: htmlUrlForBook(bookId),
       contentSelector: 'body',
-      excludeSelectors: ['nav', '#pg-header', '#pg-footer', '.pg-boilerplate'],
+      excludeSelectors: [
+        'nav',
+        '#pg-header',
+        '#pg-footer',
+        '.pg-boilerplate',
+        '#__norea_scraper_controls',
+      ],
       loadStrategy: 'network-idle',
     };
   }

@@ -169,8 +169,6 @@ export namespace Plugin {
     pluginInputs?: PluginInputSchema;
     pluginSettings?: PluginInputSchema | Record<string, unknown>;
     version: string;
-    //flag indicates whether access to LocalStorage, SesesionStorage is required.
-    webStorageUtilized?: boolean;
     getBaseUrl(): string;
     popularNovels(
       pageNo: number,

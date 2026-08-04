@@ -116,7 +116,7 @@ class StandardEbooks implements Plugin.PluginBase {
     return {
       type: 'page',
       url: requestUrl(chapterPath),
-      contentSelector: 'main, body',
+      contentSelector: 'main',
       excludeSelectors: ['nav', 'header'],
       loadStrategy: 'network-idle',
     };

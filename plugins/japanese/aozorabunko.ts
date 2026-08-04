@@ -265,7 +265,7 @@ class AozoraBunko implements Plugin.PluginBase {
       return {
         type: 'page',
         url: parseChapterPath(chapterPathValue, HTML_PREFIX).url,
-        contentSelector: '.main_text, body',
+        contentSelector: '.main_text',
         excludeSelectors: ['nav'],
         loadStrategy: 'network-idle',
       };

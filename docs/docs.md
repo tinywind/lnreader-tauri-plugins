@@ -14,7 +14,7 @@ Required methods are `getBaseUrl`, `popularNovels`, `searchNovels`,
 `parseNovel`, `parseNovelSince`, and `getChapterAcquisitionPlan`.
 
 Optional fields include filters, plugin inputs, image request headers, custom
-assets, multi-source installation, `resolveUrl`, and `webStorageUtilized`.
+assets, multi-source installation, and `resolveUrl`.
 
 ## Chapter plans
 
