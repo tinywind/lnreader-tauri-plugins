@@ -155,7 +155,7 @@ npm run verify:plugins
 The published manifest is expected at:
 
 ```text
-https://raw.githubusercontent.com/tinywind/norea-plugins/plugins/v0.2.0/.dist/plugins.min.json
+https://raw.githubusercontent.com/tinywind/norea-plugins/dist/v0.2/.dist/plugins.min.json
 ```
 
 ## Compatibility

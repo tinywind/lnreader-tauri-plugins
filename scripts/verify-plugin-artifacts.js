@@ -1,13 +1,21 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import languages from './languages.js';
 
 const DIST_DIR = '.dist';
 const COMPILED_PLUGIN_DIR = path.join('.js', 'plugins');
 const manifestPath = path.join(DIST_DIR, 'plugins.json');
 const minManifestPath = path.join(DIST_DIR, 'plugins.min.json');
-const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
-const expectedBranchSegment = `/plugins/v${packageJson.version}/.js/plugins/`;
+const sourceBranch = execSync('git branch --show-current').toString().trim();
+const artifactBranch = process.env.BRANCH || `dist/${sourceBranch}`;
+if (!sourceBranch && !process.env.BRANCH) {
+  throw new Error('BRANCH is required when verifying from a detached HEAD.');
+}
+if (!artifactBranch.startsWith('dist/')) {
+  throw new Error(`Artifact branch must start with dist/: ${artifactBranch}`);
+}
+const expectedBranchSegment = `/${artifactBranch}/.js/plugins/`;
 const chapterPageCaptureArtifacts = [
   'JjaptokiManhwa.js',
   'JjaptokiNovel.js',

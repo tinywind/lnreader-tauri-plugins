@@ -4,15 +4,14 @@ set -euo pipefail
 remote=${1:-origin}
 base_branch=${2:-}
 current=$(git rev-parse --abbrev-ref HEAD)
-version=$(node -e "console.log(require('./package.json').version);")
 if [ -z "$base_branch" ]; then
   base_branch=$current
 fi
-dist="$base_branch-dist/plugins/v$version"
+dist="dist/$base_branch"
 repo_root=$(git rev-parse --show-toplevel)
 
 case "$base_branch" in
-  plugins/*|*/plugins/*)
+  dist/*|plugins/*|*/plugins/*)
   echo "Skipping plugin publish: base branch is '$base_branch'."
   exit 0
   ;;
@@ -22,11 +21,6 @@ remote_url=$(git remote get-url "$remote")
 repo_path=$(node -e 'const url = process.argv[1]; const match = url.match(/github\.com[:/](.+?)(?:\.git)?$/); if (!match) process.exit(1); console.log(match[1].replace(/^\/+|\/+$/g, ""));' "$remote_url")
 raw_base="https://raw.githubusercontent.com/$repo_path/$dist"
 display_raw_base="$raw_base"
-
-if [ "$base_branch" = "private" ] && [ -n "${NOREA_RAW_GITHUB_TOKEN:-}" ]; then
-  raw_base="https://x-access-token:${NOREA_RAW_GITHUB_TOKEN}@raw.githubusercontent.com/$repo_path/$dist"
-  display_raw_base="https://x-access-token:***@raw.githubusercontent.com/$repo_path/$dist"
-fi
 
 release_ref="refs/remotes/$remote/$dist"
 branch_exists=false
@@ -65,7 +59,7 @@ fi
   node scripts/generate-plugin-index.js
   npm run build:compile
   USER_CONTENT_BASE="$raw_base" BRANCH="$dist" npm run build:manifest
-  npm run verify:plugins
+  BRANCH="$dist" npm run verify:plugins
 )
 
 if [ ! -s "$worktree/.dist/plugins.min.json" ]; then

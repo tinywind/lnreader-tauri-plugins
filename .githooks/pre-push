@@ -13,12 +13,12 @@ while read -r local_ref _local_sha remote_ref _remote_sha; do
   if [ "${remote_ref#refs/heads/}" != "$remote_ref" ]; then
     pushed_branch=${remote_ref#refs/heads/}
     case "$pushed_branch" in
-      plugins/*|*/plugins/*) ;;
+      dist/*|plugins/*|*/plugins/*) ;;
       *) publish_branches="$publish_branches $pushed_branch" ;;
     esac
   elif [ "$local_ref" = "HEAD" ] && [ -n "$current_branch" ]; then
     case "$current_branch" in
-      plugins/*|*/plugins/*) ;;
+      dist/*|plugins/*|*/plugins/*) ;;
       *) publish_branches="$publish_branches $current_branch" ;;
     esac
   fi
@@ -38,9 +38,14 @@ fi
 
 npm run build:compile
 
-VERSION=$(node -e "console.log(require('./package.json').version)")
-BRANCH="plugins/v$VERSION" npm run build:manifest
-npm run verify:plugins
+if [ -z "$current_branch" ]; then
+  echo "Cannot determine the source branch for artifact verification."
+  exit 1
+fi
+
+verification_branch="dist/$current_branch"
+BRANCH="$verification_branch" npm run build:manifest
+BRANCH="$verification_branch" npm run verify:plugins
 
 for publish_branch in $publish_branches; do
   ./scripts/publish-plugins.sh "$remote" "$publish_branch"

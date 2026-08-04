@@ -1,8 +1,12 @@
 $current = git rev-parse --abbrev-ref HEAD
-$version = node -e "console.log(require('./package.json').version);"
-$dist = "plugins/v$version"
+$dist = "dist/$current"
 
-Write-Output "Publishing plugins: $current -> $dist (v$version)"
+if ($current -like "dist/*" -or $current -like "plugins/*" -or $current -like "*/plugins/*") {
+  Write-Output "Skipping plugin publish: source branch is '$current'."
+  exit 0
+}
+
+Write-Output "Publishing plugins: $current -> $dist"
 
 $exists = git show-ref refs/heads/$dist
 if ($exists) {
