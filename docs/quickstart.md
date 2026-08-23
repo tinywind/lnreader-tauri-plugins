@@ -52,7 +52,23 @@ the plan URL.
 Rendered or shadow-DOM content may use `documentStartScript` to place the final
 content in a synthetic light-DOM container. The script must not post its own
 capture result. Add `data-norea-manual-action` when login, a challenge, or a
-paid gate needs user interaction.
+paid gate needs user interaction. Use the exact value `captcha` or
+`cloudflare` for those access challenges:
+
+```js
+const marker = document.createElement('div');
+marker.setAttribute('data-norea-manual-action', 'captcha');
+document.body.appendChild(marker);
+```
+
+The host validates the current absolute HTTP(S) URL, derives the shared
+source-session scope from its hostname, and asks the user to complete the
+challenge before queued work resumes. Verification uses one real queued task
+as a canary rather than trusting cached chapter content, and remains disabled
+until such a task is queued. The script only reports the challenge; it must not
+attempt to solve or bypass it. Other manual gates retain their existing marker
+values. If a sanctioned rendered-page helper throws a structured challenge
+error, rethrow it without converting it to a string.
 
 ## Resource chapters
 

@@ -44,8 +44,65 @@ value while preserving all source parameters.
 
 Use `documentStartScript` only to prepare rendered content. It may observe
 source responses and inject a stable light-DOM root. It must not emit its own
-WebView result. Mark gates requiring user interaction with
-`data-norea-manual-action`.
+WebView result.
+
+## Access challenges
+
+Mark a CAPTCHA or Cloudflare access challenge in the page DOM with one of the
+following values:
+
+```html
+<div data-norea-manual-action="captcha"></div>
+<div data-norea-manual-action="cloudflare"></div>
+```
+
+The host converts a recognized marker to the additive API 0.2 failure
+envelope:
+
+```ts
+type SourceAccessChallenge = {
+  kind: 'captcha' | 'cloudflare';
+  url: string;
+};
+
+type ChapterCaptureFailureEnvelope =
+  | {
+      ok: false;
+      code: 'manual-action-required';
+      error: string;
+      challenge?: SourceAccessChallenge;
+    }
+  | {
+      ok: false;
+      code: Exclude<ChapterCaptureErrorCode, 'manual-action-required'>;
+      error: string;
+      challenge?: never;
+    };
+```
+
+`challenge` is meaningful only when `code` is `manual-action-required`. Its
+URL must be an absolute HTTP(S) URL. The host validates and normalizes that URL
+and derives the affected source-session scope from its hostname; plugins do
+not choose the queue scope.
+
+Sanctioned rendered-page helpers may reject with an `Error` carrying the same
+`code` and `challenge` fields. Plugin methods must preserve that structured
+error when adding context; converting it to a string prevents the host from
+pausing the affected source-session queue.
+
+Current hosts pause the full affected source queue and keep individual and
+batch downloads pending. After the user completes the check, the host runs one
+queued task as a canary. Chapter canaries bypass stored-content resume paths,
+and the queue resumes only after a real acquisition completes successfully. If
+no eligible source request or chapter download is queued, verification remains
+disabled until one is added.
+
+The marker only reports that user interaction is required. Plugins must not
+solve, bypass, or simulate completion of a CAPTCHA or Cloudflare challenge.
+Other manual gates may continue using legacy marker values without a
+`challenge` payload. Older hosts still interpret either recognized marker as
+a generic `manual-action-required` failure, and newer hosts continue to accept
+legacy envelopes without `challenge`.
 
 ## Explicit resources
 
@@ -71,6 +128,11 @@ type ChapterResource =
 
 Use resources for documented connector APIs, archive decoding, PDF, and EPUB,
 not as an alternative HTTP parser for ordinary chapter pages.
+
+`baseUrl` resolves relative media and prepares media transport only. It does
+not select the source-access scope or replace the trusted acquisition URL. API
+0.2 does not declare additional authentication origins, so a CDN requiring its
+own top-level manual verification cannot be authenticated as a separate scope.
 
 ## Paths, authentication, and traffic
 
