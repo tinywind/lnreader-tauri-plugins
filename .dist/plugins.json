@@ -27,6 +27,15 @@
 		"apiVersion": "0.2"
 	},
 	{
+		"id": "ndl-next-digital-library",
+		"name": "NDL Public Domain Manga",
+		"lang": "Japanese",
+		"version": "0.1.0",
+		"url": "https://raw.githubusercontent.com/tinywind/norea-plugins/dist/v0.2/.js/plugins/japanese/ndlnextdigitallibrary.js",
+		"iconUrl": "https://raw.githubusercontent.com/tinywind/norea-plugins/dist/v0.2/public/static/siteNotAvailable.png",
+		"apiVersion": "0.2"
+	},
+	{
 		"id": "github-docs",
 		"name": "GitHub Docs",
 		"lang": "Multi",
@@ -51,6 +60,15 @@
 		"lang": "Multi",
 		"version": "0.1.3",
 		"url": "https://raw.githubusercontent.com/tinywind/norea-plugins/dist/v0.2/.js/plugins/multi/oapen.js",
+		"iconUrl": "https://raw.githubusercontent.com/tinywind/norea-plugins/dist/v0.2/public/static/siteNotAvailable.png",
+		"apiVersion": "0.2"
+	},
+	{
+		"id": "pepper-carrot",
+		"name": "Pepper&Carrot",
+		"lang": "Multi",
+		"version": "0.1.0",
+		"url": "https://raw.githubusercontent.com/tinywind/norea-plugins/dist/v0.2/.js/plugins/multi/peppercarrot.js",
 		"iconUrl": "https://raw.githubusercontent.com/tinywind/norea-plugins/dist/v0.2/public/static/siteNotAvailable.png",
 		"apiVersion": "0.2"
 	}
