@@ -8,21 +8,35 @@ echo "Running pre-push checks..."
 remote=${1:-origin}
 publish_branches=""
 current_branch=$(git branch --show-current)
+artifact_push_only=true
+saw_branch_push=false
 
 while read -r local_ref _local_sha remote_ref _remote_sha; do
   if [ "${remote_ref#refs/heads/}" != "$remote_ref" ]; then
+    saw_branch_push=true
     pushed_branch=${remote_ref#refs/heads/}
     case "$pushed_branch" in
       dist/*|plugins/*|*/plugins/*) ;;
-      *) publish_branches="$publish_branches $pushed_branch" ;;
+      *)
+        artifact_push_only=false
+        publish_branches="$publish_branches $pushed_branch"
+        ;;
     esac
   elif [ "$local_ref" = "HEAD" ] && [ -n "$current_branch" ]; then
     case "$current_branch" in
       dist/*|plugins/*|*/plugins/*) ;;
-      *) publish_branches="$publish_branches $current_branch" ;;
+      *)
+        artifact_push_only=false
+        publish_branches="$publish_branches $current_branch"
+        ;;
     esac
   fi
 done
+
+if [ "$saw_branch_push" = true ] && [ "$artifact_push_only" = true ]; then
+  echo "Skipping checks for artifact-only push."
+  exit 0
+fi
 
 HOOK_DIR=$(dirname "$0")
 "$HOOK_DIR/pre-commit"
