@@ -11,6 +11,8 @@ This repository is intentionally conservative because Norea may expose plugins a
 - Project Gutenberg plugins must use OPDS or catalog metadata for discovery instead of scraping ebook landing pages.
 - Aozora Bunko plugins must filter out records whose work copyright flag is not clear.
 - OAPEN plugins must use the official REST API or metadata feeds and surface source license information.
+- Pepper&Carrot plugins must use the official episode API, preserve David Revoy's CC BY 4.0 attribution, and retain each episode's contributor and translation credit page.
+- Next Digital Library manga plugins must use the official Book and IIIF APIs, accept only NDC `726.1*` records or legacy broad `726` records with an explicit manga title marker, require a `PDM` access restriction before reading, preserve National Diet Library attribution, and disclose requested IIIF transformations. Continuous commercial API use requires contacting NDL.
 
 ## Requires review before merge
 
